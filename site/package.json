@@ -1,0 +1,31 @@
+{
+  "name": "artex-cc-site",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "sync-media": "node scripts/sync-media.mjs",
+    "gen-tools": "node scripts/gen-tools.mjs",
+    "predev": "npm run sync-media && npm run gen-tools",
+    "prebuild": "npm run sync-media && npm run gen-tools",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.43.1",
+    "@astrojs/starlight-tailwind": "^5.0.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.13",
+    "sharp": "^0.35.5",
+    "starlight-blog": "^0.30.2",
+    "tailwindcss": "^4.3.5"
+  }
+}

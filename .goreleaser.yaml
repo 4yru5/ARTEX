@@ -1,0 +1,88 @@
+version: 2
+
+project_name: artex-cc
+
+before:
+  hooks:
+    - go mod tidy
+    - bash -c 'cd web && npm ci && npm run build'
+
+builds:
+  - main: ./cmd/artex-cc
+    binary: artex-cc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.buildDate={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+    format_overrides:
+      - goos: darwin
+        formats:
+          - zip
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+
+release:
+  github:
+    owner: SREsAreHumanToo
+    name: ARTEX-CC
+  draft: false
+  prerelease: auto
+
+nfpms:
+  - package_name: artex-cc
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
+    formats: [deb]
+    vendor: SREsAreHumanToo
+    maintainer: SREsAreHumanToo <88474954+sresarehumantoo@users.noreply.github.com>
+    homepage: https://github.com/SREsAreHumanToo/ARTEX-CC
+    description: Autonomous penetration testing platform powered by Claude Code
+    license: AGPL-3.0-only
+    section: utils
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/artex-cc/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/artex-cc/NOTICE
+
+homebrew_casks:
+  - name: artex-cc
+    directory: Casks
+    repository:
+      owner: SREsAreHumanToo
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://artex-cc.com
+    description: Autonomous penetration testing platform powered by Claude Code
+    binaries:
+      - artex-cc
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/artex-cc"]
+          end

@@ -1,0 +1,56 @@
+# Build artifacts
+/artex-cc
+/cc-artex
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+*.pprof
+*.out
+coverage.html
+__debug_bin*
+
+# Go
+vendor/
+
+# Runtime / engagement data
+.artex.json
+.cc-artex.json
+owner-label.key
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Claude Code (user-specific)
+.claude/settings.local.json
+.claude/CLAUDE.local.md
+.claude/memory/
+.claude/projects/
+.claude/worktrees/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local-only files (strategy docs, drafts, not for repo)
+.local/
+docs/internal/
+
+/eval/cmd/eval-runner/eval-runner

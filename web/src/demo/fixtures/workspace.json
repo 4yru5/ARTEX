@@ -1,0 +1,30 @@
+{
+ "dirs": {
+  "": [
+   {
+    "name": "notes",
+    "type": "dir",
+    "size": 0,
+    "modified": "2026-11-24T21:34:12.104Z"
+   },
+   {
+    "name": "scope.txt",
+    "type": "file",
+    "size": 43,
+    "modified": "2026-11-24T21:34:12.104Z"
+   }
+  ],
+  "notes": [
+   {
+    "name": "recon.md",
+    "type": "file",
+    "size": 107,
+    "modified": "2026-11-24T21:34:12.104Z"
+   }
+  ]
+ },
+ "files": {
+  "scope.txt": "acme.example\n*.acme.example\n203.0.113.0/24\n",
+  "notes/recon.md": "# Recon\n\n- portal and api share an nginx/Express stack\n- vpn.acme.example is out of scope for exploitation\n"
+ }
+}

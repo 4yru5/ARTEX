@@ -1,0 +1,94 @@
+---
+title: Architecture
+description: How Claude Code and ARTEX split the work, the exploration graph, and the layout of the codebase.
+---
+
+import { Image } from 'astro:assets';
+import architecture from '../../../../../docs/architecture.svg';
+import toolStats from '../../../data/tool-stats.json';
+
+<Image src={architecture} alt={`Claude Code (the brain) calls ARTEX-CC (${toolStats.tools} tools in ${toolStats.categories} categories) over MCP; ARTEX stores state in PostgreSQL and captures traffic through its recording proxy`} />
+
+Claude Code decides what to test, which tools to call, and in what order. ARTEX executes the calls: inserting assets, tracking the exploration graph, recording findings and credentials, logging coverage, and capturing HTTP traffic through its recording proxy. The exploration graph keeps Claude oriented across long engagements so it does not repeat work or lose context.
+
+ARTEX has no agent loop and no LLM client of its own. It never needs an API key.
+
+## The exploration graph
+
+The graph is a task board with typed nodes and edges:
+
+- **Goals** are what the engagement must prove. `prove_goal` links evidence to a goal.
+- **Intents** are planned next steps. They move from open to running to done (or cancelled). `start_intent` claims one with a 30-minute lease that renews as results are recorded against it, so parallel agents do not work the same intent.
+- **Facts** are observations, linked to the intent that produced them.
+- **Findings** are vulnerabilities, linked to affected assets, coverage records and captured traffic.
+- **Hints** and **constraints** steer the planner.
+
+Edges connect them (`derived_from`, `yields`, `spawns`, `proves`). `graph_overview` summarizes all of it in one call, which is how Claude orients at the start of every planning cycle and after any restart.
+
+Every finding traces back to the asset, the coverage record and the captured traffic that produced it. That evidence chain, not the tool count, is the point.
+
+## Transports and state
+
+The server speaks [MCP](https://modelcontextprotocol.io/) over stdio (for Claude Code) or streamable HTTP (for other clients and the web UI). All state lives in PostgreSQL. The engagement config (`.artex.json`) records the current task and exploration IDs so the server knows which engagement to serve; `switch_engagement` changes it without a restart.
+
+Several `artex-cc` processes (or several clients of one HTTP server) can work the same engagement. Intent claims keep them off each other's work, `list_changes` lets each poll what the others recorded since its last cursor, and PostgreSQL LISTEN/NOTIFY carries changes from other processes to the web UI. HTTP clients can send a signed `X-Artex-Identity` token so their claims survive reconnects and restarts.
+
+Captured traffic is indexed in SQLite under the data directory, with large bodies spilled to blob storage.
+
+## Codebase
+
+```
+ARTEX-CC/
+├── cmd/artex-cc/      CLI entrypoint: serve, init, health, tools, identity, completion, version
+├── store/             PostgreSQL data layer (assets, graph, findings, credentials, coverage)
+├── mcpserver/         MCP protocol server (stdio and HTTP transports)
+├── tools/             Tool implementations registered with the MCP server
+├── api/               REST API and auth for the web UI
+├── web/               Web UI (React, Vite, Tailwind)
+├── config/            Configuration loading and engagement state (.artex.json)
+├── identity/          Signed X-Artex-Identity tokens for HTTP clients
+├── plugin/            Exec plugin discovery and registration
+├── traffic/           Recording MITM proxy, SOCKS5, replay, HAR export, rewrite engine
+│   ├── rewrite/       Rule-based request/response rewriting
+│   └── hookvm/        Sandboxed expression evaluator for rewrite hooks
+├── evidence/          Evidence capture and storage
+├── enrich/            DNS and HTTP enrichment
+├── ingest/            Scanner output parsers (nmap, nuclei, httpx, ffuf, masscan)
+├── report/            Markdown report generation with quality analysis
+├── egress/            Rate-limiting governor for outbound requests
+└── eval/              Eval runner, scenarios and targets
+```
+
+To add a tool, see [CONTRIBUTING.md](https://github.com/SREsAreHumanToo/ARTEX-CC/blob/main/CONTRIBUTING.md#adding-a-tool).
+
+## Compared with upstream ARTEX
+
+ARTEX-CC is derived from [ARTEX](https://github.com/BaaRai/ARTEX). Upstream ships its own LLM agent loop; this project removes it and exposes the data layer as MCP tools so Claude Code becomes the agent.
+
+| | Upstream ARTEX | ARTEX-CC |
+|---|---|---|
+| LLM | Built-in agent loop (needs API key) | None. Claude Code is the LLM. |
+| Interface | Autonomous agent | MCP tool server |
+| Cost | API usage (per token) | Your Claude subscription |
+| Asset graph | Yes | Same model, same schema |
+| Exploration tracking | Yes | Same model |
+| Findings | Yes | Same model |
+| Human oversight | Watch the agent run | You steer Claude directly |
+| License | AGPL-3.0 | AGPL-3.0, with ARTEX-derived code credited in NOTICE |
+
+## Compared with other tools
+
+| | ARTEX-CC | PentestGPT | HexStrike AI | Pentest-AI |
+|---|---|---|---|---|
+| **State management** | Exploration graph (persistent, resumable) | Stateless / limited context | None | None |
+| **MCP native** | Yes ({toolStats.tools} tools) | No (agent framework) | Yes (150+ tools) | Yes (205 tools) |
+| **Evidence chains** | Yes (findings linked to assets, coverage, traffic) | No | No | No |
+| **Traffic capture** | Built-in recording proxy with replay | No | No | No |
+| **Multi-client support** | Any MCP client (Claude Code, Cline, Cursor) | Own interface | Claude Code | Claude Code |
+| **License** | AGPL-3.0 | Research | Unknown | Unknown |
+
+The differentiator is not tool count. It is the exploration graph and evidence chain model.
+
+## Compared with manual pentesting
+
+A pentest has a lot of bookkeeping: what you have tested, what you found, what is left, which credentials go where. That bookkeeping is what ARTEX handles. Claude does the reasoning and tool selection, you make the judgment calls, and ARTEX keeps the graph, the findings and the coverage ledger so nothing falls through the cracks.

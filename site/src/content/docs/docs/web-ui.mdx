@@ -1,0 +1,91 @@
+---
+title: Web UI
+description: The ARTEX dashboard, served on the same port as the MCP endpoint with serve --web.
+---
+
+import { Aside, LinkButton } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import dashboard from '../../../../../docs/screenshots/dashboard.png';
+import graph from '../../../../../docs/screenshots/graph.png';
+import findingDetail from '../../../../../docs/screenshots/finding-detail.png';
+import traffic from '../../../../../docs/screenshots/traffic.png';
+import coverage from '../../../../../docs/screenshots/coverage.png';
+import assets from '../../../../../docs/screenshots/assets.png';
+import report from '../../../../../docs/screenshots/report.png';
+
+`artex-cc serve --web` adds a dashboard on the same port as the MCP endpoint. Everything Claude records through the tools shows up here live: the exploration graph, findings with their bound traffic, coverage, credentials, and a printable report.
+
+<LinkButton href="/demo/" icon="right-arrow">Try the live demo</LinkButton>
+
+<Image src={dashboard} alt="ARTEX-CC dashboard with engagement summary, findings by severity and recent activity" widths={[800, 1600]} sizes="(min-width: 72rem) 48rem, 100vw" />
+
+## Running it
+
+```sh
+artex-cc serve --listen localhost:9400 --pg "postgres://localhost/ccartex" --proxy :8788 --web
+```
+
+Open `http://localhost:9400`. The Docker image runs with `--web` already.
+
+With `--web`, the HTTP MCP endpoint at `/mcp` requires an `Authorization: Bearer <token>` header. The token is regenerated on every start and written to `mcp-config.json` in the data directory.
+
+## Authentication
+
+On a loopback listener (`localhost`, `127.0.0.1`) the UI is open by default; pass `--auth` or set `ARTEX_AUTH=1` to require a password anyway. On any other listener, including the Docker image's `:9400`, a password is always required.
+
+On first visit the UI asks for a setup token and a password (at least 8 characters). While no password is set, the server prints a one-time setup token and the setup URL to its logs at startup; read it with `docker compose logs artex` for the Docker image. The token is kept only in memory, so a restart prints a new one, and it stops working once the password is set. Sessions last seven days. The password hash lives in `auth.json` in the data directory; to reset it, delete that file and restart the server for a new setup token.
+
+<Aside type="caution">
+Do not expose the web UI to an untrusted network. It can run commands through the chat runner and reads everything the engagement has recorded, including credentials.
+</Aside>
+
+## Pages
+
+<div class="screenshot-grid">
+  <figure>
+    <Image src={graph} alt="Exploration graph of goals, intents, facts and findings" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Exploration graph</figcaption>
+  </figure>
+  <figure>
+    <Image src={findingDetail} alt="Finding detail with bound request and response" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Findings with bound traffic evidence</figcaption>
+  </figure>
+  <figure>
+    <Image src={traffic} alt="Traffic captured by the recording proxy" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Traffic from the recording proxy</figcaption>
+  </figure>
+  <figure>
+    <Image src={coverage} alt="Coverage matrix of surfaces against risk areas" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Coverage matrix</figcaption>
+  </figure>
+  <figure>
+    <Image src={assets} alt="Asset inventory of domains, IPs and services" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Assets</figcaption>
+  </figure>
+  <figure>
+    <Image src={report} alt="Printable engagement report" widths={[640, 1280]} sizes="(min-width: 50rem) 24rem, 100vw" />
+    <figcaption>Engagement report</figcaption>
+  </figure>
+</div>
+
+When several agents work one engagement, the Dashboard's Active Intents card shows who holds each running intent's claim and how long it has left, and flags intents whose claim lapsed. Changes made by other `artex-cc` processes on the same database show up live too. Chat conversations hold their claims as the identity `chat/<conversation id>`, so a resumed conversation keeps them across a server restart.
+
+Besides the engagement views, the UI includes:
+
+- **Chat** with a Claude subprocess runner (uses the `claude` CLI, see `--claude-bin`), with agents and presets.
+- **Tasks**, live **logs** and a **commands** log.
+- **Intercept** approvals for tool calls that match allow, deny or ask rules.
+- **MCP** server config, the **tool** catalog and **skills**.
+- **Usage** (token usage), a **workspace** browser and **LLM settings**.
+
+Screenshots use a seeded demo engagement against reserved `*.example` names and documentation IP ranges.
+
+## Workspace
+
+The workspace page browses, edits, uploads and deletes files under `workspace/` in the data directory (for example `./pentest/workspace/` with `--data ./pentest`). The server creates the folder owner-only (0700) on first use. Paths cannot leave it: `..` segments and absolute paths are refused, and so is any symlink that resolves outside it. ARTEX's own files in the data directory (`auth.json`, `identity.key`, `mcp-config.json`, `traffic/`, conversations and so on) are not reachable from the workspace.
+
+Up to 0.6.1 the workspace was the data directory itself. Upgrading does not move anything, so files of your own that you kept at the top of the data directory stay where they are; move them into `workspace/` to see them in the UI.
+
+## Source link
+
+The UI links to its own source code. ARTEX-CC is AGPL-3.0: if you run a modified version as a network service, section 13 requires you to offer its users the corresponding source.

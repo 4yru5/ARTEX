@@ -1,0 +1,216 @@
+---
+title: Roadmap
+description: "What is done, what is next, and the longer-term plans for ARTEX-CC."
+---
+
+import toolStats from '../../data/tool-stats.json';
+
+## 1. Current state summary
+
+ARTEX is a working MCP tool server for penetration testing. It exposes ARTEX's
+data model as tools Claude Code calls directly, with no separate LLM API key.
+
+**Lines of code:** ~36,000 Go, excluding tests.
+
+**Tool count:** {toolStats.tools} registered tools in {toolStats.categories} categories.
+
+**Test count:** 1,700+ Go test functions across all packages.
+
+**What works today:**
+
+- **CLI:** `serve` (stdio and HTTP transports, `--web` for the web UI), `init` (creates engagement, schema, CA cert; `--dry-run` and `--format json`), `tools` (prints the tool catalog, `--json`, no database needed), `version` (with `--json`), `health` (PostgreSQL connectivity check, `--format json`, `--timeout`), `identity` (`issue`, `rotate` and `show` for signed client identity tokens), `completion` (bash/zsh/fish). `--version` flag on all subcommands. `--timeout` for graceful shutdown. `ARTEX_PG` and `ARTEX_LISTEN` env var overrides.
+- **Store (PostgreSQL):** Full schema with auto-migration. Assets (6 types), companies, company scope, task scope, exploration graph (nodes, edges, anchors, constraints), findings, credentials, coverage ledger with history, intercept rules, activity log. Engagement export/import to portable JSON archives.
+- **Exploration graph:** Goals, intents, facts, findings, hints, constraints. Edges connect them (derived_from, yields, spawns, proves). Frontier query. Graph overview for situational awareness. Prove-goal workflow with confidence gating. Intent lifecycle (start, complete, cancel) with duplicate intents skipped. Target change journal (`record_target_change`, `record_target_restore`) with restore status in the report.
+- **Asset management:** Bulk insert with upsert, DSL-based queries (fuzzy, exact, exclusion, numeric comparisons, boolean combinators, parentheses), untested-asset queries, company scope attribution.
+- **Findings and credentials:** Report findings with severity/evidence/assets, list findings, merge duplicates, dismiss false positives, duplicate detection, bind findings to captured traffic. Save and list credentials with upsert-on-domain+username. AES-256-GCM encryption at rest for credential passwords.
+- **Coverage:** Record coverage entries (surface x risk_area x outcome), coverage history, coverage gaps analysis (`list_coverage_gaps`).
+- **Evidence capture:** `save_evidence`, `list_evidence`, `get_evidence`, and `capture_command_output` tools for structured proof-of-concept storage.
+- **Report generation:** Markdown report from findings, assets, and coverage. Finding quality assessment (PoE level, verification status, counterevidence). CSV and markdown export formats for findings, assets, and nodes.
+- **Enrich:** Passive reconnaissance tools (`enrich_domain`, `enrich_ip`, `enrich_service`) with DNS resolution, reverse DNS, WHOIS, certificate transparency, technology fingerprinting, and URL validation.
+- **Scanner ingestion:** Parsers for nmap, nuclei, httpx, ffuf, and masscan (XML and JSON) output. Results feed directly into the asset graph.
+- **Scope enforcement:** `check_scope` tool and automatic enforcement in asset, enrich, and traffic tools. Blocks out-of-scope actions; there is no override.
+- **Multi-engagement switching:** `switch_engagement` tool for changing active context without a server restart.
+- **Engagement management:** Update and delete engagements, activity timeline view.
+- **Activity log:** `list_activity` and `log_activity` tools for audit trail access.
+- **Traffic recording proxy:** Full MITM proxy with SQLite index (WAL mode, busy-timeout), blob storage, body spill for large payloads, WebSocket/SSE stream capture, URL path templating, host listing, paginated search (including body full-text search), HAR 1.2 export, request replay with modifications. Graceful shutdown with connection draining.
+- **Traffic rewrite engine:** Rule-based request/response rewriting with a custom hook VM (eval.go, stdlib, validation). Rewrite flow with match/transform pipeline.
+- **Egress governor:** Rate limiting with profiles (quiet/balanced/aggressive/off), per-host and global concurrency caps, jitter, 429/503 backoff, GET cache/coalescing, configurable user agent.
+- **External traffic ingest:** Browser-extension capture endpoint.
+- **SOCKS5 proxy:** SOCKS5 with UDP relay support.
+- **Raw TCP/UDP capture.**
+- **Transparent proxy (Linux):** iptables-based transparent interception.
+- **Intercept rules:** Tool-call interception with allow/deny/ask actions and timeout policy.
+- **Web UI:** `serve --web` serves a dashboard on the MCP port: exploration graph, findings with bound traffic, assets, coverage, credentials, traffic explorer, report, plus chat with a Claude subprocess runner, agents and presets, intercept approvals, and password auth.
+- **Multi-client MCP:** Per-client session state over the HTTP transport, with the `list_sessions` tool.
+- **Multi-agent coordination:** Intent claims with a 30-minute lease that renews whenever the holder records results, claim-on-close for `complete_intent` and `cancel_intent`, duplicate intent skipping in `add_intent`, cross-process change notifications, and `list_changes` for polling what other agents recorded. HTTP clients can hold claims under a signed `X-Artex-Identity` that survives reconnects and restarts, and `serve --require-identity` makes it mandatory for claims.
+- **Plugins:** Exec-based plugin system. Executables in the plugin directory describe their tools with `--manifest` and are registered as MCP tools. Results can include assets, facts and findings, which are written into the graph with scope enforcement.
+- **Traffic analysis:** `traffic_patterns` for temporal analysis, `traffic_stats` with request size statistics, `traffic_clear` to delete captured traffic by host.
+- **MCP resource:** `artex://engagement` resource serves the orchestration guide with live engagement context.
+- **Structured logging:** slog-based JSON logging across all packages.
+- **CI:** GitHub Actions with fmt-check, golangci-lint, `go build`, `go vet`, `go test`, `govulncheck`, a frontend type-check, Codecov coverage reporting, and store tests against a real PostgreSQL instance.
+- **Distribution:** v0.7.0 released with cross-platform binaries (goreleaser), .deb packaging, a Homebrew cask, and a Docker image that ships the web UI, the Claude CLI and a pentest tooling layer (nmap, impacket, evil-winrm, nuclei, ffuf and more).
+- **Documentation:** Project site at [artex-cc.com](https://artex-cc.com) with docs, evals, a blog, a [tool reference](/docs/tools/) generated from `artex-cc tools --json`, [MCP client configs](/docs/mcp-clients/) and a [live demo](/demo/) of the web UI. AGENTS.md contributor guide.
+- **Community files:** AGPL-3.0 license, CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md, example engagement walkthrough, godoc comments on all exported types. Zero open issues, 220+ PRs merged.
+
+
+## 2. P0: Ship blockers (all complete)
+
+All P0 items have been addressed:
+
+- ✅ **2.1 SECURITY.md** -- Responsible disclosure policy published.
+- ✅ **2.2 Credential encryption at rest** -- AES-256-GCM encryption for stored passwords.
+- ✅ **2.3 SQLite WAL mode** -- WAL mode and busy-timeout configured for concurrent access.
+- ✅ **2.4 Graceful shutdown** -- Connection draining on traffic proxy shutdown.
+- ✅ **2.5 Input validation** -- All tools validate required fields and return clear errors.
+
+
+## 3. P1: High-value features
+
+### ✅ 3.1 Enrich package
+
+Done. `enrich_domain`, `enrich_ip`, `enrich_service` tools with DNS, reverse DNS, WHOIS, certificate transparency, and technology fingerprinting. Results feed into `insert_assets`.
+
+### ✅ 3.2 Evidence package
+
+Done. `save_evidence`, `list_evidence`, `get_evidence`, and `capture_command_output` tools in `evidence/` and `tools/evidence_tools.go`. Structured PoC storage with metadata in PostgreSQL.
+
+### ✅ 3.3 Engagement export and import
+
+Done. `export_engagement` and `import_engagement` tools in `store/export.go`. Portable JSON archive format with optional traffic blob companion.
+
+### ✅ 3.4 Multi-engagement switching
+
+Done. `switch_engagement` tool in `mcpserver/switch.go` updates the server's active context without a restart.
+
+### ✅ 3.5 Intent lifecycle
+
+Done. `start_intent`, `complete_intent`, `cancel_intent` tools for transitioning intent state.
+
+### ✅ 3.6 Activity log tools
+
+Done. `list_activity` (paginated, filterable) and `log_activity` tools.
+
+### ✅ Scanner ingestion
+
+Done. `ingest/` package with parsers for nmap, nuclei, httpx, and ffuf. Results feed into the asset graph.
+
+### ✅ Scope enforcement
+
+Done. `check_scope` tool and automatic enforcement in asset, enrich, and traffic tools. Originally P4, promoted and implemented in P1.
+
+### ✅ 3.7 Finding triage
+
+Done. `merge_findings`, `dismiss_finding`, and duplicate detection tools for managing finding lifecycle.
+
+### ✅ 3.8 Coverage gaps analysis
+
+Done. `list_coverage_gaps` tool identifies untested surfaces and risk areas.
+
+### ✅ 3.9 Engagement management
+
+Done. `update_engagement`, `delete_engagement`, and activity timeline tools for full engagement lifecycle.
+
+### ✅ 3.10 Masscan ingestion
+
+Done. XML and JSON parser support in `ingest/` for masscan output, feeding results into the asset graph.
+
+### ✅ 3.11 CSV export
+
+Done. CSV export format for findings, assets, and nodes alongside existing markdown export.
+
+
+## 4. P2: Quality and polish
+
+### ✅ 4.1 Test coverage
+
+1,470 Go test functions across all packages. Integration-level multi-tool workflow tests added. Coverage reporting via Codecov. Nine packages above 85% coverage.
+
+### ✅ 4.2 Error message consistency
+
+Done. Standardized error format across all tools.
+
+### ✅ 4.3 Structured logging
+
+Done. `slog`-based JSON logging across all packages. Only `log.Fatal` calls remain in `eval/` entry points.
+
+### ✅ 4.4 README accuracy
+
+Done. Tool count corrected, architecture section updated, README restructured.
+
+### ✅ 4.5 MCP config snippet
+
+Done. `init` now shows both minimal and full configuration examples including `--data` and `--proxy` flags.
+
+
+## 5. P3: Distribution and community
+
+### ✅ 5.1 goreleaser
+
+Done. Cross-platform binary builds for Linux, macOS, and Windows via GitHub Actions.
+
+### ✅ 5.2 Dockerfile
+
+Done. Multi-stage Dockerfile for container deployments.
+
+### ✅ 5.3 Homebrew cask
+
+Done. goreleaser publishes the cask to `SREsAreHumanToo/homebrew-tap`. Install with `brew install --cask sresarehumantoo/tap/artex-cc`.
+
+### ✅ 5.4 Example engagement walkthrough
+
+Done. Annotated [walkthrough](/docs/walkthrough/) showing init through report generation.
+
+### ✅ 5.5 Good first issues
+
+Done. Good-first-issues created and resolved. Zero open issues.
+
+### ✅ 5.6 pkg.go.dev documentation
+
+Done. 64 godoc comments added to all exported types and functions.
+
+### ✅ 5.7 CLAUDE.md and AGENTS.md
+
+Done. Project-level CLAUDE.md and AGENTS.md for contributor and agent onboarding.
+
+### ✅ 5.8 Release v0.1.0
+
+Done. First tagged release with cross-platform binaries via goreleaser and GitHub Actions.
+
+### ✅ 5.9 Project site
+
+Done. Docs, evals, changelog, blog, generated tool reference and a static live demo of the web UI at [artex-cc.com](https://artex-cc.com).
+
+
+## 6. P4: Future vision
+
+### ✅ 6.1 Plugin system for external tools
+
+Done. Exec-based plugins register MCP tools (0.4.0) and can return `assets`, `facts` and `findings` alongside text. The server writes them into the graph through `insert_assets`, `record_fact` and `report_finding`, with scope enforcement. Each invocation carries the active engagement, its scope, the data directory and the recording proxy address.
+
+### ✅ 6.2 Web dashboard
+
+Done. `serve --web` serves the web UI alongside the HTTP transport: exploration graph, asset inventory, findings, coverage, traffic and report views, and it grew beyond read-only with chat, agents and intercept approvals. See [Web UI](/docs/web-ui/).
+
+### ✅ 6.3 Collaborative multi-agent support
+
+Done. `start_intent` takes a 30-minute lease for the calling session, `owner` or signed identity and refuses other holders until it lapses; recording a fact, finding or coverage entry against the intent renews it. `complete_intent` and `cancel_intent` claim an open intent before closing it, and `add_intent` skips intents that duplicate an open or running one. `graph_overview` shows who holds each running intent. Every process publishes successful mutating tool calls on the `artex_changes` PostgreSQL channel, so `serve --web` sees changes made by other processes. Agents poll `list_changes` with a cursor for new or updated findings, facts, intents, goals, hints and assets, and see the claims they hold. HTTP clients can send a signed `X-Artex-Identity` token (`artex-cc identity issue`) so their claims survive reconnects and server restarts, and the target change journal tells agents what others changed on a host and what baseline to restore. The orchestration guide tells parallel sessions to claim before working, skip claimed intents, record results as they go and poll for changes.
+
+### ✅ 6.4 Scope enforcement
+
+Done. Promoted to P1 and implemented. `check_scope` tool with enforcement in asset, enrich, and traffic tools.
+
+### ✅ 6.5 Finding deduplication and triage
+
+Done. `merge_findings`, `dismiss_finding`, and `bind_finding_traffic` tools in `tools/finding_tools.go`.
+
+### ✅ 6.6 Temporal analysis of traffic
+
+Done. `traffic_patterns` tool for temporal traffic analysis, shipped in 0.4.0.
+
+### ✅ 6.7 Demo GIF / screencast
+
+Done. The README embeds a walkthrough recording of the web UI, and the project site serves a [live demo](/demo/).
+
+### ✅ 6.8 Multi-client MCP support
+
+Done. The HTTP transport tracks a session per connected client with its own state, and `list_sessions` lists them. Shipped in 0.4.0.
