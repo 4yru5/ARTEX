@@ -80,7 +80,7 @@ jobs:
             --exclude '^https://app\.hackthebox\.com'
             --accept 200,206,429
             'site/dist/**/*.html'
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request'
         with:
           path: site/dist
